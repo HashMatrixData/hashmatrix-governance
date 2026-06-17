@@ -1,8 +1,29 @@
 # hashmatrix-governance
 
-> hashmatrix 数据中台子模块 · 所属：数据治理分系统
+> hashmatrix 数据中台子模块 · 所属：应用服务层 · 数据治理分系统
 >
 > 主仓：[HashMatrixData/hashmatrix](https://github.com/HashMatrixData/hashmatrix)
+
+## 角色与位置（一眼看懂）
+
+- **所属**：应用服务层 · 数据治理分系统（无状态 Spring Boot 应用）。
+- **一句话**：平台的"数据账本"——元数据 / 血缘 / 质量 / 数据标准，**旁路采集各环节信息、不挡主链路**。
+- **调用流**：data-foundation（湖仓/计算）→ 旁路采集 → **governance（元数据·血缘·质量）** → 供 webui / 数据服务消费。
+
+## 职责与边界
+
+- **做**：元数据管理、数据血缘、数据质量规则、专题-主题-实体三层模型、数据标准。
+- **不做（边界）**：不做采集/计算（`data-foundation`）；不做分类分级/安全审批（`security`）；不存业务明细数据（只管元数据）。
+
+## 骨架技术选型（首选 · 待逐仓细化）
+
+| 维度 | 选型 |
+|--|--|
+| 运行时 | Spring Boot（Java） |
+| 元数据 / 血缘 | **OpenMetadata**（备 Apache Atlas / DataHub） |
+| 业务库 | PostgreSQL |
+
+> 血缘 / 关系可视化前端在 `webui`（AntV G6）；多租户上下文经主仓 `libs-java` 的 `starter-tenant` 透传。
 
 ## 产品形态与多租户（北极星）
 
@@ -11,14 +32,6 @@
 **本仓视角**：治理资产按租户隔离（schema/catalog 路由 + 行级兜底），不跨租户串。
 
 > 详见主仓 `docs/00-主仓初始化-spec.md`、`docs/architecture/05-多租户与控制平面.md`。
-
-## 职责
-
-元数据、专题-主题-实体三层模型、数据标准、数据质量。
-
-## 技术栈
-
-Java（**具体技术选型待独立讨论，逐步丰富**）
 
 ## 说明
 
