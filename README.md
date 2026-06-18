@@ -61,7 +61,43 @@ curl -s localhost:8080/actuator/health
 curl -s localhost:8080/api/governance/probe -H 'X-Tenant-Id: tenant-demo'
 ```
 
-> 经 Maven 坐标解析 `io.hashmatrix` 公共依赖需能访问 GitHub Packages（`~/.m2/settings.xml` 配置 `server id=github` + `GITHUB_TOKEN`，`packages:read`）。多租户隔离：每租户路由到 `gov_<tenant>` schema（行级兜底过滤）。**连接参数/凭据均 env 可覆盖、不入库**（红线合规）。
+### 冷克隆构建：配置 GitHub Packages
+
+经 Maven 坐标解析 `io.hashmatrix` 公共依赖需能访问 GitHub Packages。**注意**：pom 内 `<repositories>` 无法解析 `<parent>` 自身——Maven 必须先从制品仓拉到 parent 才会读 pom，故 `<parent>` 的解析只能靠 `~/.m2/settings.xml` 里的 **repository（profile）**，仅配 server 凭据不够。空 `.m2` 新机请加入下列 `settings.xml`（与 CI 等价）：
+
+```xml
+<settings>
+  <servers>
+    <server>
+      <id>github</id>
+      <username>YOUR_GITHUB_USERNAME</username>
+      <password>YOUR_GITHUB_TOKEN</password>   <!-- 需 packages:read -->
+    </server>
+  </servers>
+  <profiles>
+    <profile>
+      <id>github</id>
+      <repositories>
+        <repository>
+          <id>github</id>
+          <url>https://maven.pkg.github.com/HashMatrixData/hashmatrix</url>
+          <releases><enabled>true</enabled></releases>
+          <snapshots><enabled>false</enabled></snapshots>
+        </repository>
+      </repositories>
+      <pluginRepositories>
+        <pluginRepository>
+          <id>github</id>
+          <url>https://maven.pkg.github.com/HashMatrixData/hashmatrix</url>
+        </pluginRepository>
+      </pluginRepositories>
+    </profile>
+  </profiles>
+  <activeProfiles><activeProfile>github</activeProfile></activeProfiles>
+</settings>
+```
+
+> 或本地先 `mvn install` libs-java（制品进本地 `.m2` 即可离线解析）。多租户隔离：每租户路由到 `gov_<tenant>` schema（行级兜底过滤）。**连接参数/凭据均 env 可覆盖、不入库**（红线合规）。
 
 ## 说明
 

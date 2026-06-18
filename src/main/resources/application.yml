@@ -5,7 +5,8 @@ spring:
   datasource:
     url: jdbc:postgresql://${PG_HOST:localhost}:${PG_PORT:5432}/${PG_DB:governance}
     username: ${PG_USER:governance}
-    password: ${PG_PASSWORD:governance}
+    # 口令无默认：生产经 ESO 注入，缺失即 fail-fast（弱口令默认仅 application-local.yml 留作本地开发）
+    password: ${PG_PASSWORD}
   sql:
     init:
       mode: never          # 基座不建业务表（typedef/实例表由引擎 #1 落地）

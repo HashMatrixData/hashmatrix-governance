@@ -68,6 +68,13 @@ jobs:
       - name: 红线校验（源码/POM/配置无客户信息）
         run: bash scripts/redline-check.sh
 
+      # 密钥/凭据熵扫描：redline-check 只覆盖 IP/denylist，gitleaks 补 token/key 维度
+      # （主仓 redline-ci 不进 submodule，本仓凭据门须自带）。
+      - name: Gitleaks（密钥扫描）
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       # 构建 + 单测 + 集成切片（Testcontainers 起 PG/ES，ubuntu runner 自带 Docker）。
       # 质量门（enforcer 基线等）随 platform-parent 复用。
       - name: Build + test (unit + integration)
