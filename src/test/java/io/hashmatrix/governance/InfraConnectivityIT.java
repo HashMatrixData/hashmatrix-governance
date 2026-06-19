@@ -23,7 +23,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  *
  * <p>走 failsafe（{@code *IT}），{@code mvn package} 不触发；{@code mvn verify} 需本地/CI 有 Docker。
  */
-@SpringBootTest
+@SpringBootTest(classes = GovernanceApplication.class)
 @AutoConfigureMockMvc
 @Testcontainers
 class InfraConnectivityIT {
