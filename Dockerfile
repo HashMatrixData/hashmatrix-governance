@@ -21,5 +21,6 @@ WORKDIR /app
 RUN addgroup -S app && adduser -S app -G app
 COPY --from=build /workspace/target/hashmatrix-governance-*.jar app.jar
 USER app
-EXPOSE 8080
+# 应用 HTTP 8082 / 管理(actuator) 9082（M1 §3 端口基线，运行期可经 SERVER_PORT/MANAGEMENT_SERVER_PORT 覆盖）。
+EXPOSE 8082 9082
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

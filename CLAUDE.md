@@ -43,3 +43,21 @@
 数据治理分系统：元数据、专题-主题-实体三层模型、数据标准、数据质量、血缘。
 
 **核心选型已定（AD-16）**：走**自研元模型引擎**——运行期用户可在 UI 自定义元模型（元类继承 / 属性约束 / 关系基数 / 分类树 / 草稿发布 / 版本 / 平台公共+租户私有作用域），以 **Apache Atlas 的 TypeDef 体系为设计蓝本**，落 Spring Boot + PostgreSQL(JSONB) + Elasticsearch。OpenMetadata / Atlas / DataHub **不作为核心引擎**，仅降级为元数据采集连接器 / 血缘解析的可选来源。**元数据采集（取结构·旁路）≠ 数据采集（data-foundation 搬数据·主链路）**，二者共用 Connector SPI + 数据源统一管理（AD-15）。其余具体选型**待逐步丰富**。
+
+> 自研元模型引擎为 Epic（[#1](https://github.com/HashMatrixData/hashmatrix-governance/issues/1)），已分解为 13 个 sub-issue；M1 仅交付 [#4](https://github.com/HashMatrixData/hashmatrix-governance/issues/4)（mock `/api/meta/search`），引擎核心（typedef/关系/分类/生命周期/校验/作用域/模板）与实例/采集/血缘/事件属 post-M1。
+
+## 🔗 契约（Contracts）—— 跨子系统集成
+
+本项目经**契约**与其它子系统集成。契约的**单一事实源在主仓** `HashMatrixData/hashmatrix` 的 `contracts/`：
+- 索引（机器可读）`contracts/registry.yaml` · 规范 `contracts/CONVENTIONS.md` · 设计 `docs/architecture/06-契约治理.md`
+- 在线：https://github.com/HashMatrixData/hashmatrix/tree/main/contracts
+
+**铁律**：先改契约、再改实现；加法兼容默认放行，破坏性走 MAJOR + 弃用期双跑 + 通知消费方；消费方一律 tolerant reader。
+
+**本仓契约**：
+- producer：`icd/governance-metadata`、`openapi/governance-metadata-v1`、`asyncapi/governance-metadata`
+- consumer：`icd/tenant-context-headers`
+
+**如何查阅（随时拉最新，勿存本地副本）**：
+- 在 superproject（`hashmatrix/services/governance`）下：直接读 `../../contracts/`。
+- 独立 clone：WebFetch `https://raw.githubusercontent.com/HashMatrixData/hashmatrix/main/contracts/registry.yaml`（公开仓免鉴权）→ 按 registry 取对应契约；或 `gh api repos/HashMatrixData/hashmatrix/contents/contracts/<path> -H "Accept: application/vnd.github.raw"`。

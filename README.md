@@ -54,12 +54,18 @@ mvn -B package
 # 2b) + 集成切片（failsafe，Testcontainers 起 PG+ES，需 Docker）
 mvn -B verify
 
-# 3) 本地起栈 + 运行，验证健康检查
+# 3) 本地起栈 + 运行，验证健康检查（端口基线：应用 8082 / 管理 9082）
 docker compose -f docker-compose.local.yml up -d
 bash scripts/run-local.sh          # 或 mvn spring-boot:run -Dspring-boot.run.profiles=local
-curl -s localhost:8080/actuator/health
-curl -s localhost:8080/api/governance/probe -H 'X-Tenant-Id: tenant-demo'
+curl -s localhost:9082/actuator/health
+curl -s localhost:8082/api/governance/probe -H 'X-Tenant-Id: tenant-demo'
+# 元数据检索（governance-metadata-v1 · 返回脱敏 mock，#4）
+curl -s 'localhost:8082/api/meta/search?q=orders&type=table' -H 'X-Tenant-Id: tenant-demo'
 ```
+
+> ⚠️ `PG_PASSWORD` 无默认值（红线 fail-fast）：本地经 `application-local.yml` 弱口令或 compose 提供；
+> K8s / M1 须由 Helm/ESO 注入，否则应用**启动即失败**——readiness 的 deps-optional（PG/ES DOWN 不拖垮探针）
+> 只在进程**启动成功之后**才生效，启动期缺口令仍会 fail-fast。
 
 ### 冷克隆构建：配置 GitHub Packages
 
