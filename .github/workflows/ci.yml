@@ -75,10 +75,17 @@ jobs:
 
       # 密钥/凭据熵扫描：redline-check 只覆盖 IP/denylist，gitleaks 补 token/key 维度
       # （主仓 redline-ci 不进 submodule，本仓凭据门须自带）。
-      - name: Gitleaks（密钥扫描）
-        uses: gitleaks/gitleaks-action@v2
+      # 用开源 gitleaks CLI 二进制——licensed gitleaks-action@v2 对 org 仓要求 GITLEAKS_LICENSE
+      # （缺则整个 build job 红、连带 image job 不跑），改走免费 CLI 保留密钥扫描门、免 license。
+      - name: Gitleaks（密钥扫描 · 开源 CLI）
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: "8.18.4"
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /tmp gitleaks
+          /tmp/gitleaks version
+          # --redact 不回显密钥本体；扫 git 历史，命中即 exit 1 → 阻断 CI
+          /tmp/gitleaks detect --source . --redact --no-banner -v --exit-code 1
 
       # 构建 + 单测 + 集成切片（Testcontainers 起 PG/ES，ubuntu runner 自带 Docker）。
       # 质量门（enforcer 基线等）随 platform-parent 复用。
