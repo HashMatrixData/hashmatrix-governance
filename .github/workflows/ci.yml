@@ -5,13 +5,18 @@ on:
     branches: [main]
   pull_request:
 
+# 解析 GitHub Packages 上的 io.hashmatrix 公共依赖需 packages:read（顶层默认，build job 用）。
+# 发布镜像到 ghcr 需 packages:write —— 仅 image job 在 job 级提权（job 级 permissions 覆盖顶层，遵最小权限）。
 permissions:
   contents: read
-  packages: read   # 解析 GitHub Packages 上的 io.hashmatrix 公共依赖
+  packages: read
 
 jobs:
   build:
+    name: 构建 + 测试
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}   # 项目版本 → image job 打镜像 tag
     steps:
       - uses: actions/checkout@v4
 
@@ -80,9 +85,106 @@ jobs:
       - name: Build + test (unit + integration)
         run: mvn -B -ntp clean verify
 
-      - name: 镜像构建（多阶段，BuildKit secret 注入同一 settings.xml，不落镜像层）
-        env:
-          DOCKER_BUILDKIT: "1"
+      # 在此解析版本（而非 image job）以复用已就绪的 JDK/Maven 缓存/凭据，免去二次解析 parent。
+      - name: 解析项目版本（供镜像 tag）
+        id: version
         run: |
-          docker build --secret id=maven_settings,src="$HOME/.m2/settings.xml" \
-            -t hashmatrix-governance:ci .
+          # -DforceStdout 把值写 stdout；为防冷缓存下混入下载/告警行污染 tag，只取末行并校验非空。
+          V=$(mvn -B -ntp -q help:evaluate -Dexpression=project.version -DforceStdout | tail -n1)
+          if [ -z "$V" ]; then echo "::error::无法解析 project.version"; exit 1; fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "项目版本：$V"
+
+  image:
+    name: 构建并发布镜像（ghcr）
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write          # 仅本 job 提权写 ghcr（write 含 read，docker build 拉 parent 复用）
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # 镜像内 Dockerfile 的 build 阶段 `mvn package` 仍需经 GitHub Packages 解析 parent/BOM，
+      # 故重新生成 settings.xml 经 BuildKit secret 注入（与 build job 内容相同；job 间不共享文件系统，
+      # 无 artifact 传递，故此处重新内联生成——已知重复：后续若改制品仓/凭据，两 job 须同步改）。
+      - name: 配置 Maven settings（GitHub Packages · 供镜像内 mvn 解析 parent/BOM）
+        env:
+          GH_ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p "$HOME/.m2"
+          cat > "$HOME/.m2/settings.xml" <<EOF
+          <settings>
+            <servers>
+              <server>
+                <id>github</id>
+                <username>${GH_ACTOR}</username>
+                <password>${GH_TOKEN}</password>
+              </server>
+            </servers>
+            <profiles>
+              <profile>
+                <id>github</id>
+                <repositories>
+                  <repository>
+                    <id>github</id>
+                    <url>https://maven.pkg.github.com/HashMatrixData/hashmatrix</url>
+                    <releases><enabled>true</enabled></releases>
+                    <snapshots><enabled>false</enabled></snapshots>
+                  </repository>
+                </repositories>
+                <pluginRepositories>
+                  <pluginRepository>
+                    <id>github</id>
+                    <url>https://maven.pkg.github.com/HashMatrixData/hashmatrix</url>
+                  </pluginRepository>
+                </pluginRepositories>
+              </profile>
+            </profiles>
+            <activeProfiles>
+              <activeProfile>github</activeProfile>
+            </activeProfiles>
+          </settings>
+          EOF
+
+      # tag 方案：:<short-sha> 为**不可变**、可追溯到具体提交的发布 tag（部署应优先 pin 它）。
+      # :<项目版本>（本仓 pom=0.1.0，非 SNAPSHOT）当前作为**随 main 覆盖的可变别名**——注意它形如正式版、
+      #   实则每次 push 被覆盖；主仓 deploy 现 pin :0.1.0 且 pullPolicy 默认 IfNotPresent，存在「节点缓存旧
+      #   :0.1.0 不再拉取」的陈旧风险，平台级版本/tag/pullPolicy 约定待主仓拍板（D5），见讨论 HashMatrixData/hashmatrix#discussions/20。
+      # 镜像名对齐主仓 deploy/values（ghcr.io/hashmatrixdata/governance）；ghcr owner 须全小写。
+      - name: 计算镜像名与 tag
+        id: meta
+        run: |
+          if [ -z "$VERSION" ]; then echo "::error::上游 build job 未传出 project.version"; exit 1; fi
+          OWNER=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          echo "image=ghcr.io/${OWNER}/governance" >> "$GITHUB_OUTPUT"
+          echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "镜像：ghcr.io/${OWNER}/governance · 版本：${VERSION} · sha：${GITHUB_SHA::7}"
+
+      # 仅 push 到 main 时登录并发布；PR 只 build 验证 Dockerfile，不写 registry（避免污染）。
+      - name: 登录 ghcr
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 构建镜像（多阶段，BuildKit secret 注入 settings.xml，不落镜像层）
+        env:
+          DOCKER_BUILDKIT: "1"   # --secret 需 BuildKit；显式兜底，不依赖 runner 默认
+        run: |
+          docker build \
+            --secret id=maven_settings,src="$HOME/.m2/settings.xml" \
+            -t "${{ steps.meta.outputs.image }}:${VERSION}" \
+            -t "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha }}" \
+            .
+
+      - name: 推送镜像（仅 main · PR 跳过）
+        if: github.event_name == 'push'
+        run: |
+          docker push "${{ steps.meta.outputs.image }}:${VERSION}"
+          docker push "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha }}"
