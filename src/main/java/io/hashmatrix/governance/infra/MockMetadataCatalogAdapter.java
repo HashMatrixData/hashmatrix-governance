@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * {@link MetadataCatalogPort} 的 **M1 mock 适配器**：返回脱敏 mock 元数据，贴合契约
- * {@code governance-metadata-v1} 的 {@code /api/meta/search}，供 webui / tools-bi 联调消费。
+ * {@code governance-metadata-v1} 的 {@code /api/meta/search}，供 webui 联调消费。
  *
  * <p>租户经 {@link TenantContextHolder} 流过（审计/日志可见）。M1 对所有租户返回**同一脱敏目录**——
  * 真实**按租户隔离的 PG(JSONB)+ES 落库**见 #12（typedef-driven），届时新增对应 Adapter 即替换本类，
