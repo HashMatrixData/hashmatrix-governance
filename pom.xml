@@ -95,7 +95,15 @@
       <artifactId>hashmatrix-starter-observability</artifactId>
     </dependency>
 
-    <!-- 持久化/检索：PostgreSQL(JSONB) + Elasticsearch 客户端（仅打通连通，不建业务表） -->
+    <!--
+      持久化/检索：PostgreSQL(JSONB) + Elasticsearch 客户端。
+      data-jpa 落首张业务表 metadata_asset（M2 #27）；jdbc 仍保留，供 JdbcEsConnectivityAdapter
+      的 search_path 连通探针复用。schema 由 Flyway 管理（启动期建表），JPA 仅 validate 映射。
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-jdbc</artifactId>
@@ -103,6 +111,16 @@
     <dependency>
       <groupId>org.postgresql</groupId>
       <artifactId>postgresql</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+    <!-- schema 演进（Flyway）：M2 行级 tenant_id 隔离档（主仓 Disc #58 / arch 05 D9 落地档位）。 -->
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-database-postgresql</artifactId>
       <scope>runtime</scope>
     </dependency>
     <dependency>
