@@ -17,7 +17,6 @@ import io.hashmatrix.governance.infra.persistence.MetadataAssetEntity;
 import io.hashmatrix.governance.infra.persistence.MetadataAssetRepository;
 import io.hashmatrix.starter.tenant.TenantContext;
 import io.hashmatrix.starter.tenant.TenantContextHolder;
-import io.hashmatrix.starter.tenant.TenantContextMissingException;
 import io.hashmatrix.starter.web.BusinessException;
 import io.hashmatrix.test.fixtures.MockTenants;
 import java.util.List;
@@ -148,13 +147,15 @@ class PostgresMetadataAdapterTest {
     void failsClosedOnRegisterWhenTenantMissing() {
         PostgresMetadataAdapter adapter = new PostgresMetadataAdapter(repository);
 
-        // 缺租户头：requireTenantId 抛出，绝不落库（D9/D2 fail-closed）。
+        // 缺租户头：fail-closed 拒绝为 400（客户端错误，非 500），绝不落库（D9/D2）。
         assertThatThrownBy(
                         () ->
                                 adapter.register(
                                         new AssetUpsertRequest(
                                                 "orders", AssetType.TABLE, null, null, List.of(), Map.of())))
-                .isInstanceOf(TenantContextMissingException.class);
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getStatus())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
         verifyNoInteractions(repository);
     }
 

@@ -62,7 +62,7 @@ public class PostgresMetadataAdapter implements MetadataCatalogPort {
     @Override
     @Transactional
     public AssetSummary register(AssetUpsertRequest request) {
-        String tenant = TenantContextHolder.requireTenantId(); // fail-closed：缺租户头即拒绝（D9/D2）
+        String tenant = currentTenantOrReject(); // fail-closed：缺租户头即拒绝（D9/D2）
         if (request.code() != null && repository.existsByTenantIdAndCode(tenant, request.code())) {
             throw new BusinessException(
                     HttpStatus.CONFLICT, "ASSET_CODE_CONFLICT",
@@ -80,7 +80,7 @@ public class PostgresMetadataAdapter implements MetadataCatalogPort {
     @Override
     @Transactional
     public AssetSummary update(String id, AssetUpsertRequest request) {
-        String tenant = TenantContextHolder.requireTenantId(); // fail-closed（D9/D2）
+        String tenant = currentTenantOrReject(); // fail-closed（D9/D2）
         UUID assetId = parseId(id);
         // 限本租户取数：非本租户 / 不存在 → 404（不越权改他租户、不泄漏存在性）。
         MetadataAssetEntity entity =
@@ -102,6 +102,20 @@ public class PostgresMetadataAdapter implements MetadataCatalogPort {
                 request.code(), request.tags(), request.attributes());
         log.debug("meta asset updated tenant={} id={}", tenant, assetId);
         return toSummary(repository.save(entity));
+    }
+
+    /**
+     * 写路径取当前租户，缺失即 fail-closed 拒绝（D9/D2）。返回 **400**（客户端/网关未注入 {@code X-Tenant-Id}，
+     * 属调用方错误），而非 {@code requireTenantId()} 的 {@code IllegalStateException}→500——避免把客户端错误
+     * 记成服务端错误。生产中租户头由网关强制注入（require_tenant=true），此为应用层兜底。
+     */
+    private static String currentTenantOrReject() {
+        return TenantContextHolder.getTenantId()
+                .orElseThrow(
+                        () ->
+                                new BusinessException(
+                                        HttpStatus.BAD_REQUEST, "TENANT_REQUIRED",
+                                        "X-Tenant-Id is required for write operations"));
     }
 
     /** 路径 id 解析：非法 UUID 视为不存在（404），不泄漏内部细节、不抛 500。 */
